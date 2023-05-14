@@ -1,16 +1,49 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
-	"strings"
+	"os"
 )
 
-func main() {
+type DictRequest struct {
+	TransType string `json:"trans_type"`
+	Source    string `json:"source"`
+	UserID    string `json:"user_id"`
+}
+
+type DictResponse struct {
+	Rc   int `json:"rc"`
+	Wiki struct {
+	} `json:"wiki"`
+	Dictionary struct {
+		Prons struct {
+			EnUs string `json:"en-us"`
+			En   string `json:"en"`
+		} `json:"prons"`
+		Explanations []string      `json:"explanations"`
+		Synonym      []string      `json:"synonym"`
+		Antonym      []string      `json:"antonym"`
+		WqxExample   [][]string    `json:"wqx_example"`
+		Entry        string        `json:"entry"`
+		Type         string        `json:"type"`
+		Related      []interface{} `json:"related"`
+		Source       string        `json:"source"`
+	} `json:"dictionary"`
+}
+
+func query(word string) {
 	client := &http.Client{}
-	var data = strings.NewReader(`{"trans_type":"en2zh","source":"good"}`)
+	request := DictRequest{TransType: "en2zh", Source: word}
+	buf, err := json.Marshal(request)
+	if err != nil {
+		log.Fatal(err)
+	}
+	var data = bytes.NewReader(buf)
 	req, err := http.NewRequest("POST", "https://api.interpreter.caiyunai.com/v1/dict", data)
 	if err != nil {
 		log.Fatal(err)
@@ -42,5 +75,30 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("%s\n", bodyText)
+	// fmt.Printf("%s\n", bodyText)
+	if resp.StatusCode != 200 {
+		log.Fatal("bad StatusCode", resp.StatusCode, "body", string(bodyText))
+	}
+
+	var dictResponse DictResponse
+	err = json.Unmarshal(bodyText, &dictResponse)
+	if err != nil {
+		log.Fatal(err)
+	}
+	// fmt.Printf("%#v\n", dictResponse)
+	fmt.Println(word, "UK:", dictResponse.Dictionary.Prons.En, "US:", dictResponse.Dictionary.Prons.EnUs)
+	for _, item := range dictResponse.Dictionary.Explanations {
+		fmt.Println(item)
+	}
+}
+
+func main() {
+	if len(os.Args) != 2 {
+		fmt.Fprintf(os.Stderr, `usage: simpleDict WORD
+example: simpleDict hello
+		`)
+		os.Exit(1)
+	}
+	word := os.Args[1]
+	query(word)
 }
